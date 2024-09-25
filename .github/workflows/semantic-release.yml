@@ -1,0 +1,15 @@
+name: 'Semantic-release'
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  semantic-release:
+    name: 'Run semantic-release'
+    uses: bankrate/finserv-reusable-gha/.github/workflows/semantic-release.yml@main
+    secrets: inherit
+    with:
+      registry-url: 'https://npm.pkg.github.com/'
+      scope: '@REPLACE_GITHUB_ORG'

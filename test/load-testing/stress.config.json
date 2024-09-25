@@ -1,0 +1,13 @@
+{
+  "stages": [
+    {
+      "duration": "1m",
+      "target": 2
+    },
+    {
+      "duration": "5m",
+      "target": 16
+    }
+  ],
+  "thresholds": {}
+}

@@ -1,0 +1,43 @@
+# name: Deploy
+
+# # Here's the breakdown of the workflow
+# # ------------------------------------
+# # 1. checkout
+# # 2. configure aws credentials
+# # 3. aws ecr login (to pull Anvil base images from ECR and later push to ECR)
+# # 4. docker build
+# # 5. wiz-scan?
+# # 6. docker push
+# # 7. shield notify
+
+# on:
+#   release:
+#     types: [published]
+
+# jobs:
+#   release:
+#     name: Release
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read # This is required for reading the repository
+#       packages: read # This is required for reading GitHub package
+#       id-token: write # This is required for requesting the JWT for OIDC authentication
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+#       - name: configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v2
+#         with:
+#           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/example-role # TODO: replace role
+#           aws-region: ${{ env.AWS_REGION }}
+#       - name: Login to Amazon ECR
+#         uses: aws-actions/amazon-ecr-login@v2.0.1
+#       - name: Build, tag, and push docker image to Amazon ECR
+#         env:
+#           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#           REPOSITORY: prod-REPLACE-APPLICATION-NAME
+#           IMAGE_TAG: ${{ github.ref_name }} # TODO: figure out if this is correct
+#         run: docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG , $REGISTRY/$REPOSITORY:latest  .
+
+#       - name: Docker Push
+#         run: docker push -a $REGISTRY/$REPOSITORY

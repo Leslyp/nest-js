@@ -1,0 +1,84 @@
+name: 'Checks'
+
+on:
+  push:
+    branches:
+      - '*'
+      - '!main'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4 ##built-in GitHub Action
+      - name: node
+        uses: actions/setup-node@v4 ## built-in Github Action
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com/
+          scope: '@creditcardscom'
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.ORG_GITHUB_ACTION_TOKEN}}
+      - name: install dependencies
+        run: npm ci --ignore-scripts
+      - name: build
+        run: npm run build
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4 ##built-in GitHub Action
+      - name: node
+        uses: actions/setup-node@v4 ## built-in Github Action
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com/
+          scope: '@creditcardscom'
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.ORG_GITHUB_ACTION_TOKEN}}
+      - name: install dependencies
+        run: npm ci --ignore-scripts
+      - name: test
+        run: npm run test:cov
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4 ##built-in GitHub Action
+      - name: node
+        uses: actions/setup-node@v4 ## built-in Github Action
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com/
+          scope: '@creditcardscom'
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.ORG_GITHUB_ACTION_TOKEN}}
+      - name: install dependencies
+        run: npm ci --ignore-scripts
+      - name: lint
+        run: npm run lint
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4 ##built-in GitHub Action
+      - name: node
+        uses: actions/setup-node@v4 ## built-in Github Action
+        with:
+          node-version: 18
+          registry-url: https://npm.pkg.github.com/
+          scope: '@creditcardscom'
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.ORG_GITHUB_ACTION_TOKEN}}
+      - name: install dependencies
+        run: npm ci --ignore-scripts
+      - name: format
+        run: npm run format:check

@@ -1,0 +1,2 @@
+\.gitallowed.*
+\/test\/load-testing\/k6.js:.*:.*client_secret:.*__ENV

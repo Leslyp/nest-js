@@ -1,0 +1,203 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@5
+  aws-ecr: circleci/aws-ecr@6
+  aws-s3: circleci/aws-s3@2
+  shield: shield/hook@2
+  wiz: redventures/wiz@1.0.3
+
+executors:
+  main:
+    docker:
+      - image: cimg/node:18.18.2
+
+commands:
+  auth-npm-saas:
+    description: 'Setup NPM auth for GitHub Packages'
+    steps:
+      - run: echo -e "//npm.pkg.github.com/:_authToken=${GH_TOKEN}\n@creditcardscom:registry=https://npm.pkg.github.com/\n@redventures:registry=https://npm.pkg.github.com/\n@bankrate:registry=https://npm.pkg.github.com/\nalways-auth=true" > ~/project/.npmrc
+
+jobs:
+  build:
+    executor: main
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - auth-npm-saas
+      - node/install-packages:
+          include-branch-in-cache-key: false
+      - run: npm run build
+      - run: npm ci --production
+      - aws-ecr/ecr-login:
+          account-url: ECR_REGISTRY_URL_ANVIL
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_ANVIL
+          aws-access-key-id: AWS_ACCESS_KEY_ID_ANVIL
+          profile-name: anvil
+          region: AWS_REGION_ANVIL
+      - aws-ecr/build-image:
+          account-url: AWS_ECR_ACCOUNT_URL_US_WEST_2
+          aws-access-key-id: AWS_ACCESS_KEY_ID_US_WEST_2
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_US_WEST_2
+          region: AWS_REGION_US_WEST_2
+          repo: $CIRCLE_PROJECT_REPONAME
+          tag: 'latest,$CIRCLE_TAG'
+      - run:
+          name: Archive Docker image # Need to archive the image to use it in Wiz job
+          command: |
+            docker save -o image.tar "$AWS_ECR_ACCOUNT_URL_US_WEST_2/$CIRCLE_PROJECT_REPONAME"
+      - persist_to_workspace:
+          root: .
+          paths:
+            - image.tar
+
+  wiz-scan:
+    executor: main
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Load archived Docker image
+          command: docker load -i image.tar
+      - wiz/scan:
+          image: image.tar
+
+  publish:
+    executor: main
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - auth-npm-saas
+      - node/install-packages:
+          include-branch-in-cache-key: false
+      - run: npm run build
+      - run: npm ci --production
+      - aws-ecr/ecr-login:
+          account-url: ECR_REGISTRY_URL_ANVIL
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_ANVIL
+          aws-access-key-id: AWS_ACCESS_KEY_ID_ANVIL
+          profile-name: anvil
+          region: AWS_REGION_ANVIL
+      - aws-ecr/build-and-push-image:
+          account-url: AWS_ECR_ACCOUNT_URL_US_WEST_2
+          aws-access-key-id: AWS_ACCESS_KEY_ID_US_WEST_2
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_US_WEST_2
+          region: AWS_REGION_US_WEST_2
+          repo: $CIRCLE_PROJECT_REPONAME
+          tag: 'latest,$CIRCLE_TAG'
+
+  build-docs:
+    executor: main
+    steps:
+      - checkout
+      - auth-npm-saas
+      - node/install-packages
+      - run: npm run build
+      - run:
+          name: Generate docs
+          # environment:
+          #   REPLACE_REQUIRED_VARS: true
+          command: npm run gen:docs
+      - store_artifacts:
+          path: REPLACE-APPLICATION-NAME-swagger.json
+      - persist_to_workspace:
+          root: .
+          paths:
+            - REPLACE-APPLICATION-NAME-swagger.json
+
+  publish-docs:
+    executor: main
+    steps:
+      - checkout
+      - auth-npm-saas
+      - attach_workspace:
+          at: .
+      - aws-s3/copy:
+          aws-access-key-id: AWS_ACCESS_KEY_ID_API_DOCS_US_WEST_2
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_API_DOCS_US_WEST_2
+          aws-region: AWS_REGION_US_WEST_2
+          from: REPLACE-APPLICATION-NAME-swagger.json
+          to: s3://cards-api-docs-production-us-west-2/REPLACE-APPLICATION-NAME/$CIRCLE_TAG.json
+      - aws-s3/copy:
+          aws-access-key-id: AWS_ACCESS_KEY_ID_API_DOCS_US_WEST_2
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY_API_DOCS_US_WEST_2
+          aws-region: AWS_REGION_US_WEST_2
+          from: REPLACE-APPLICATION-NAME-swagger.json
+          to: s3://cards-api-docs-production-us-west-2/REPLACE-APPLICATION-NAME/latest.json
+
+  notify-shield:
+    executor: main
+    steps:
+      - shield/notify_artifact_built:
+          token: SHIELD_TOKEN
+
+workflows:
+  tests:
+    jobs:
+      # - build-docs:
+      #     context:
+      #       - artifactory
+      #       - github-write
+      #     filters:
+      #       tags:
+      #         only: /.*/
+      #       branches:
+      #         ignore: /.*/
+      # - publish-docs:
+      #     context:
+      #       - artifactory
+      #       - github-write
+      #     # requires:
+      #     #   - build-docs
+      #     filters:
+      #       # Skip RCs
+      #       tags:
+      #         only: /^\d+\.\d+\.\d+$/
+      #       branches:
+      #         ignore: /.*/
+      - build:
+          context:
+            - github-write
+            - anvil
+            - artifactory
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - wiz-scan:
+          context:
+            - wiz
+          requires:
+            - build
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: main
+      - publish:
+          context:
+            - github-write
+            - artifactory
+            - anvil
+          requires:
+            - wiz-scan
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - notify-shield:
+          context: shield
+          requires:
+            - publish
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
